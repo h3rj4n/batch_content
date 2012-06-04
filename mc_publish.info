@@ -1,0 +1,10 @@
+name = Medische Content Publish
+description = Publish all content belonging to the medische content module.
+core = 7.x
+
+package = Medische Content
+dependencies[] = medische_content
+
+;files[] =
+;stylesheet[] =
+;scripts[] =
