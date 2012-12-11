@@ -6,12 +6,12 @@
 /**
 * Implements hook_menu()
 */
-function publish_content_menu() {
+function batch_content_menu() {
   $items['admin/config/content/publish'] = array(
     'title' => 'Publish content type',
     'description' => 'Publish all nodes from a content type',
     'page callback' => 'drupal_get_form',
-    'page arguments' => array('publish_content_get_settings_form'),
+    'page arguments' => array('batch_content_get_settings_form'),
     'access arguments' => array('administer site configuration'),
     'type' => MENU_LOCAL_TASK | MENU_NORMAL_ITEM,
   );
@@ -20,15 +20,15 @@ function publish_content_menu() {
 }
 
 /**
-* Page callback drupal_get_form publish_content_get_settings_form
+* Page callback drupal_get_form batch_content_get_settings_form
 */
-function publish_content_get_settings_form($form, &$form_state) {
+function batch_content_get_settings_form($form, &$form_state) {
   $form = array();
   
   $form['content_type'] = array(
    '#type' => 'checkboxes',
    '#title' => 'Content type',
-   '#options' => _publish_content_options(),
+   '#options' => _batch_content_options(),
   );
   $form['submit'] = array(
     '#type' => 'submit',
@@ -39,11 +39,11 @@ function publish_content_get_settings_form($form, &$form_state) {
 }
 
 /**
-* function _publish_content_options
+* function _batch_content_options
 *
 * @return array with content types
 */
-function _publish_content_options($id = null) {
+function _batch_content_options($id = null) {
   // get all content types
   $content_types = node_type_get_types();
   $arr = array();
@@ -61,7 +61,7 @@ function _publish_content_options($id = null) {
 /**
 * callback form validate
 */
-function publish_content_get_settings_form_validate($form, &$form_state) {
+function batch_content_get_settings_form_validate($form, &$form_state) {
   $values = $form_state['values'];
   
   // check if field is not empty
@@ -79,7 +79,7 @@ function publish_content_get_settings_form_validate($form, &$form_state) {
 /**
 * callback form submit
 */
-function publish_content_get_settings_form_submit($form, &$form_state) {
+function batch_content_get_settings_form_submit($form, &$form_state) {
   $values = $form_state['values'];
   
   $types = array();
@@ -92,9 +92,9 @@ function publish_content_get_settings_form_submit($form, &$form_state) {
   $batch = array(
     'title' => t('Updating content type(s)'),
     'operations' => array(
-      array('publish_content_update_content_types', array($types)),
+      array('batch_content_update_content_types', array($types)),
     ),
-    'finished' => 'publish_content_batch_finished',
+    'finished' => 'batch_content_batch_finished',
   );
   
   batch_set($batch);
@@ -103,7 +103,7 @@ function publish_content_get_settings_form_submit($form, &$form_state) {
 /**
 * batch callback
 */
-function publish_content_update_content_types($types, &$context) {
+function batch_content_update_content_types($types, &$context) {
   
   if (empty($context['sandbox'])) {
     $context['sandbox']['progress'] = 0;
@@ -142,7 +142,7 @@ function publish_content_update_content_types($types, &$context) {
 /**
 * batch callback finished
 */
-function publish_content_batch_finished($success, $results, $operations) {
+function batch_content_batch_finished($success, $results, $operations) {
   if ($success) {
     $message = format_plural(count($results), 'One post processed', '@count posts processed');
   } else {

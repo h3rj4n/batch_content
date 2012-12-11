@@ -1,4 +1,4 @@
-name = Publish Content
+name = Batch Content
 description = Publish all content belonging to a content type.
 core = 7.x
 
