@@ -1,12 +1,7 @@
 <?php
 /**
-* Implements hook_init()
-*/
-/* -- Delete line
-function publish_content_init() {
-   
-}
-// */
+ * @file
+ * Publish Content module file.
 
 /**
 * Implements hook_menu()
@@ -23,15 +18,6 @@ function publish_content_menu() {
   
   return $items;
 }
-
-/**
-* Implements hook_permission()
-*/
-/* -- Delete line
-function publish_content_permission() {
-   
-}
-// */
 
 /**
 * Page callback drupal_get_form publish_content_get_settings_form
@@ -118,7 +104,7 @@ function publish_content_get_settings_form_submit($form, &$form_state) {
 * batch callback
 */
 function publish_content_update_content_types($types, &$context) {
-   
+  
   if (empty($context['sandbox'])) {
     $context['sandbox']['progress'] = 0;
     $context['sandbox']['current_node'] = 0;
@@ -147,8 +133,8 @@ function publish_content_update_content_types($types, &$context) {
     $context['sandbox']['progress']++;
     $context['sandbox']['current_node'] = $node->nid;
     $context['message'] = check_plain($node->title);
-}
-if ($context['sandbox']['progress'] != $context['sandbox']['max']) {
+  }
+  if ($context['sandbox']['progress'] != $context['sandbox']['max']) {
     $context['finished'] = $context['sandbox']['progress'] / $context['sandbox']['max'];
   }
 }
