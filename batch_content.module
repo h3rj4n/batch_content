@@ -2,21 +2,362 @@
 /**
  * @file
  * Publish Content module file.
+ */
 
 /**
 * Implements hook_menu()
 */
 function batch_content_menu() {
-  $items['admin/config/content/publish'] = array(
-    'title' => 'Publish content type',
-    'description' => 'Publish all nodes from a content type',
+  $items['admin/config/content/batch-content'] = array(
+    'title' => 'Batch Content',
+    'description' => 'Execute some batches on entities.',
     'page callback' => 'drupal_get_form',
     'page arguments' => array('batch_content_get_settings_form'),
     'access arguments' => array('administer site configuration'),
-    'type' => MENU_LOCAL_TASK | MENU_NORMAL_ITEM,
+    'type' => MENU_NORMAL_ITEM,
   );
-  
+  $items['admin/config/content/batch-content/publish'] = array(
+    'title' => 'Publish content type',
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+  );
+  $items['admin/config/content/batch-content/delete'] = array(
+    'title' => 'Remove content',
+    'description' => 'Remove content based on content type and other settings.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('batch_content_delete_content_form', 'node'),
+    'access arguments' => array('administer site configuration'),
+    'type' => MENU_LOCAL_TASK,
+  );
+  $items['admin/config/content/batch-content/delete/node'] = array(
+    'title' => 'Remove node content',
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+  );
+  $items['admin/config/content/batch-content/delete/taxonomy'] = array(
+    'title' => 'Remove taxonomy content',
+    'description' => 'Remove content based on content type and other settings.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('batch_content_delete_content_form', 'taxonomy_term'),
+    'access arguments' => array('administer site configuration'),
+    'type' => MENU_LOCAL_TASK,
+  );
+  $items['admin/config/content/batch-content/delete/node-from-taxonomy-term'] = array(
+    'title' => 'Remove content from taxonomy term',
+    'description' => 'Remove content which is assigned to a taxonomy term.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('batch_content_delete_content_form', 'node_from_taxonomy_term'),
+    'access arguments' => array('administer site configuration'),
+    'type' => MENU_LOCAL_TASK,
+  );
+  $items['admin/config/content/batch-content/delete/products_by_supplier'] = array(
+    'title' => 'Remove products by supplier',
+    'description' => 'Remove content based on the supplier.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('batch_content_delete_content_form', 'products_by_supplier'),
+    'access arguments' => array('administer site configuration'),
+    'type' => MENU_LOCAL_TASK,
+  );
+  $items['admin/config/content/batch-content/orphan'] = array(
+    'title' => 'Remove orphan content',
+    'description' => 'Remove content based on content type and other settings.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('batch_content_delete_orphan_form'),
+    'access arguments' => array('administer site configuration'),
+    'type' => MENU_LOCAL_TASK,
+  );
+
+  $items['admin/config/content/batch-content/change-ra'] = array(
+    'title' => 'RA aanpassen',
+    'description' => 'Radioactivity waardes aanpassen.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('batch_content_change_ra'),
+    'access arguments' => array('administer site configuration'),
+    'type' => MENU_LOCAL_TASK,
+  );
   return $items;
+}
+
+/**
+ * Ajax callback
+ *
+ * @param array $form
+ * @param array $form_state
+ *
+ * @return array $form
+ */
+function batch_content_get_term_by_vocabulary($form, $form_state) {
+  return $form['content_wrapper'];
+}
+
+/**
+ * Page callback: Displays a form to select wich types to delete
+ *
+ * @see batch_content_delete_content_form_validate()
+ * @see batch_content_delete_content_form_submit()
+ *
+ * @ingroup forms
+ */
+function batch_content_delete_content_form($form, &$form_state, $entity_type) {
+  $options = array();
+  $title = NULL;
+
+  switch ($entity_type) {
+    case 'node':
+      $options = _batch_content_options();
+      $title = t('Content type');
+      break;
+    case 'taxonomy_term':
+      $title = t('Vocabulair name');
+      $vocabularies = taxonomy_get_vocabularies();
+
+      foreach ($vocabularies as $vid => $vocabulair) {
+        $options[$vid] = $vocabulair->name;
+      }
+      break;
+    case 'node_from_taxonomy_term':
+      $vocabulary_options = array();
+      $title = t('Select Taxonomy terms');
+      $vocabularies = taxonomy_get_vocabularies();
+      foreach ($vocabularies as $vid => $vocabulair) {
+        $vocabulary_options[$vid] = $vocabulair->name;
+      }
+
+      // vocabulary dropdown
+      $form['vocabulary'] = array(
+        '#weight' => 0,
+        '#title' => t('Select Taxonomy vocabulary'),
+        '#type' => 'select',
+        '#empty_value' => '',
+        '#default_value' => key($vocabulary_options),
+        '#options' => $vocabulary_options,
+        '#ajax' => array(
+          'callback' => 'batch_content_get_term_by_vocabulary',
+          'wrapper' => 'div-checkboxes',
+          'method' => 'replace',
+          'effect' => 'fade',
+        ),
+      );
+
+      // term options for checkboxes
+      $vocabulary = !empty($form_state['values']['vocabulary']) ? $form_state['values']['vocabulary'] : key($vocabulary_options);
+      if (!empty($vocabulary) && is_numeric($vocabulary)) {
+        $tree = taxonomy_get_tree($vocabulary);
+        foreach ($tree as $term) {
+          $options[$term->tid] = $term->name;
+        }
+      }
+      break;
+
+    case 'products_by_supplier':
+      $title = t('Supplier');
+      // Moved to a separate function.
+      $options = getSuppliers();
+      break;
+  }
+  $form['content_wrapper'] = array(
+    '#type' => 'container',
+    '#attributes' => array(
+      'class' => array(),
+      'id' => 'div-checkboxes',
+    ),
+  );
+  $form['content_wrapper']['content_type'] = array(
+    '#type' => 'checkboxes',
+    '#title' => $title,
+    '#options' => $options,
+    '#required' => TRUE,
+  );
+  $form['regex_search'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Title containing'),
+    '#description' => t('Use regex to search for a specific title.'),
+  );
+  $field = field_info_field('field_xml_data');
+  if (!empty($field['bundles'][$entity_type])) {
+    $form['xml_search'] = array(
+      '#type' => 'textfield',
+      '#title' => t('XML field containing (alleen bedoelt voor producten)'),
+      '#description' => t('Zoek naar bepaalde waardes in het XML veld. Dit zoekt naar *waarde*. Dus zoeken op heren vind ook heren in de tekst. Zoek bijvoorbeeld op :heren zodat je weet dat het in het jusite veld is.', array(':heren' => '<gender>Heren</gender>')),
+      '#field_prefix' => '%',
+      '#field_suffix' => '%',
+    );
+  }
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Delete'),
+  );
+  return $form;
+}
+
+/**
+ * Form validation handler for batch_content_delete_content_form().
+ *
+ * @see batch_content_delete_content_form_submit()
+ */
+function batch_content_delete_content_form_validate($form, &$form_state) {
+
+}
+
+/**
+ * Form submission handler for batch_content_delete_content_form().
+ *
+ * @see batch_content_delete_content_form_validate()
+ */
+function batch_content_delete_content_form_submit($form, &$form_state) {
+  $values = $form_state['values'];
+
+  $types = array();
+  foreach($values['content_type'] as $type) {
+    if ($type != '0') {
+      $types[] = $type;
+    }
+  }
+
+  $options = array(
+    'regex' => $values['regex_search'],
+    'bundles' => $types,
+    'entity_type' => $form_state['build_info']['args'][0],
+    'xml_field' => !empty($values['xml_search']) ? $values['xml_search'] : NULL,
+  );
+
+  $batch = array(
+    'title' => t('Deleting content type(s)'),
+    'operations' => array(
+      array('batch_content_delete_content', array($types, $options)),
+    ),
+    'finished' => 'batch_content_batch_finished',
+  );
+
+  batch_set($batch);
+}
+
+/**
+ * Page callback: Displays a form to select wich types to delete
+ *
+ * @see batch_content_delete_content_form_validate()
+ * @see batch_content_delete_content_form_submit()
+ *
+ * @ingroup forms
+ */
+function batch_content_delete_orphan_form($form, &$form_state) {
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Delete'),
+  );
+  return $form;
+}
+
+/**
+ * Form validation handler for batch_content_delete_content_form().
+ *
+ * @see batch_content_delete_content_form_submit()
+ */
+function batch_content_delete_orphan_form_validate($form, &$form_state) {
+
+}
+
+/**
+ * Form submission handler for batch_content_delete_content_form().
+ *
+ * see batch_content_delete_content_form_validate()
+ */
+function batch_content_delete_orphan_form_submit($form, &$form_state) {
+
+  $values = $form_state['values'];
+
+  // The operations for the batch.
+  $operations = array();
+
+  // Get all the node references for the node_reference module.
+  if (module_exists('node_reference')) {
+    // Query the database.
+    $fields = db_select('field_config', 'f')
+      ->fields('f', array('field_name'))
+      ->condition('type', 'node_reference')
+      ->execute()->fetchCol();
+
+    foreach($fields as $field) {
+      $field_name = $field . '_nid';
+      $operations[] = array('batch_content_orphan', array($field, $field_name, 'field_data_'));
+      $operations[] = array('batch_content_orphan', array($field, $field_name, 'field_revision_'));
+    }
+  }
+
+  // Get all the references for the entityreference module.
+  if (module_exists('entityreference')) {
+    // Query the database.
+    $fields = db_select('field_config', 'f')
+      ->fields('f', array('field_name'))
+      ->condition('type', 'entityreference')
+      ->execute()->fetchCol();
+
+    foreach ($fields as $field) {
+      $field_info = field_info_field($field);
+      // The field should target a node.
+      if ($field_info['settings']['target_type'] == 'node') {
+        $field_name = $field . '_target_id';
+        $operations[] = array('batch_content_orphan', array($field, $field_name, 'field_data_'));
+        $operations[] = array('batch_content_orphan', array($field, $field_name, 'field_revision_'));
+      }
+    }
+  }
+
+  $batch = array(
+    'title' => t('Deleting content type(s)'),
+    'operations' => $operations,
+    'finished' => 'batch_content_batch_finished',
+  );
+
+  batch_set($batch);
+}
+
+function batch_content_orphan($field, $field_name, $table, &$context) {
+  // create the current table name
+  $current = $table . $field;
+
+  if (empty($context['sandbox'])) {
+    $context['sandbox']['progress'] = 0;
+    $context['sandbox']['current_node'] = 0;
+
+    $count = db_select($current, 'f')
+      ->fields('f')
+      ->condition(db_or()->isNull($field_name)->isNull('n.nid'));
+    $count->leftJoin('node', 'n', $field_name . ' = n.nid');
+    $count = $count->countQuery()->execute()->fetchField();
+
+    $context['sandbox']['max'] = $count;
+  }
+  if (function_exists('dd')) {
+    dd($current . ' - ' . $context['sandbox']['max'] . ' / ' . $context['sandbox']['progress']);
+  }
+
+  // delete this many at a batch
+  $limit = 40;
+
+  $rids = db_select($current, 'c')
+    ->fields('c', array('revision_id'))
+    ->condition(db_or()->isNull($field_name)->isNull('n.nid'))
+    ->range(0, $limit);
+  $rids->leftJoin('node', 'n', $field_name . ' = n.nid');
+  $rids = $rids->execute()->fetchCol();
+
+  if (!empty($rids)) {
+    $delete = db_delete($current)
+      ->condition('revision_id', $rids, 'IN')
+      ->execute();
+  }
+
+  // $context['results'][] = $nid;
+  $context['sandbox']['progress'] += $limit;
+  // $context['sandbox']['current_node'] = $nid;
+  // $context['message'] = check_plain('Deleted: ' . $nid);
+
+  if ($context['sandbox']['progress'] != $context['sandbox']['max']) {
+    $context['finished'] = $context['sandbox']['progress'] / $context['sandbox']['max'];
+  }
+
+  if ($context['sandbox']['max'] == 0) {
+    $context['finished'] = 1;
+  }
 }
 
 /**
@@ -24,17 +365,18 @@ function batch_content_menu() {
 */
 function batch_content_get_settings_form($form, &$form_state) {
   $form = array();
-  
+
   $form['content_type'] = array(
-   '#type' => 'checkboxes',
-   '#title' => 'Content type',
-   '#options' => _batch_content_options(),
+    '#type' => 'checkboxes',
+    '#title' => 'Content type',
+    '#options' => _batch_content_options(),
+    '#required' => TRUE,
   );
   $form['submit'] = array(
     '#type' => 'submit',
     '#value' => t('Send'),
   );
-   
+
   return $form;
 }
 
@@ -63,7 +405,7 @@ function _batch_content_options($id = null) {
 */
 function batch_content_get_settings_form_validate($form, &$form_state) {
   $values = $form_state['values'];
-  
+
   // check if field is not empty
   $content_type = true;
   foreach($values['content_type'] as $type) {
@@ -81,14 +423,14 @@ function batch_content_get_settings_form_validate($form, &$form_state) {
 */
 function batch_content_get_settings_form_submit($form, &$form_state) {
   $values = $form_state['values'];
-  
+
   $types = array();
   foreach($values['content_type'] as $type) {
-   if ($type != '0') {
-    $types[] = $type;
-   }
+    if ($type != '0') {
+      $types[] = $type;
+    }
   }
-  
+
   $batch = array(
     'title' => t('Updating content type(s)'),
     'operations' => array(
@@ -96,15 +438,191 @@ function batch_content_get_settings_form_submit($form, &$form_state) {
     ),
     'finished' => 'batch_content_batch_finished',
   );
-  
+
   batch_set($batch);
+}
+
+/**
+ * Batch callback: remove all nodes of type based on title
+ */
+function batch_content_delete_content($types, $options, &$context) {
+  // Set some default values for the array.
+  $options += array(
+    'entity_type' => 'node',
+    'limit' => 20,
+  );
+
+  switch ($options['entity_type']) {
+    case 'products_by_supplier':
+      if (empty($context['sandbox'])) {
+        $context['sandbox']['progress'] = 0;
+        $context['sandbox']['current_node'] = 0;
+
+        $query = db_select('field_data_field_leverancier', 'l')
+          ->fields('l', array('entity_id'))
+          ->condition('field_leverancier_target_id', $options['bundles'], 'IN');
+        $query->join('node', 'n', 'l.entity_id = n.nid');
+
+        if (!empty($options['regex'])) {
+          $query->condition('n.title', $options['regex'], 'REGEXP');
+        }
+        $res = $query->execute();
+        $context['sandbox']['max'] = $res->rowCount();
+      }
+
+      $query = db_select('field_data_field_leverancier', 'l')
+          ->fields('l', array('entity_id'))
+          ->condition('field_leverancier_target_id', $options['bundles'], 'IN')
+          ->range(0, $options['limit']);
+      $query->join('node', 'n', 'l.entity_id = n.nid');
+
+      // Add the option for regex.
+      if (!empty($options['regex'])) {
+        $query->condition('title', $options['regex'], 'REGEXP');
+      }
+      $res = $query->execute();
+      $ids = array();
+      while($results = $res->fetchAssoc()) {
+        array_push($ids, $results['entity_id']);
+      }
+
+      // delete type node with fetched id's
+      $entity_delete = 'node';
+
+      break;
+
+    case 'node_from_taxonomy_term':
+      if (empty($context['sandbox'])) {
+        $context['sandbox']['progress'] = 0;
+        $context['sandbox']['current_node'] = 0;
+
+        $query = db_select('node', 'n')
+          ->fields('n', array('nid'))
+          ->condition('i.tid', $options['bundles'], 'IN')
+          ->groupBy('n.nid');
+        $query->join('taxonomy_index', 'i', 'i.nid = n.nid');
+
+        if (!empty($options['regex'])) {
+          $query->condition('title', $options['regex'], 'REGEXP');
+        }
+        $res = $query->execute();
+
+        $context['sandbox']['max'] = $res->rowCount();
+      }
+
+      $query = db_select('node', 'n')
+          ->fields('n', array('nid'))
+          ->condition('i.tid', $options['bundles'], 'IN')
+          ->range(0, $options['limit'])
+          ->groupBy('n.nid');
+      $query->join('taxonomy_index', 'i', 'i.nid = n.nid');
+
+      // Add the option for regex.
+      if (!empty($options['regex'])) {
+        $query->condition('title', $options['regex'], 'REGEXP');
+      }
+      $res = $query->execute();
+
+      $ids = array();
+      while($results = $res->fetchAssoc()) {
+        array_push($ids, $results['nid']);
+      }
+
+      $entity_delete = 'node';
+
+      break;
+
+    default:
+      if (empty($context['sandbox'])) {
+        $context['sandbox']['progress'] = 0;
+        $context['sandbox']['current_node'] = 0;
+
+        $query = new EntityFieldQuery();
+        $query->entityCondition('entity_type', $options['entity_type'])
+          ->count();
+
+        if (!empty($options['regex'])) {
+          $query->propertyCondition('title', $options['regex'], 'REGEXP');
+        }
+
+        // Attach the content types (for nodes).
+        $exclude_types = array('comment', 'taxonomy_term');
+        if (!in_array($options['entity_type'], $exclude_types)) {
+          $query->entityCondition('bundle', $options['bundles'], 'IN');
+        }
+        elseif ($options['entity_type'] == 'taxonomy_term') {
+          $query->propertyCondition('vid', $options['bundles'], 'IN');
+        }
+
+        // Process the XML field
+        if (!empty($options['xml_field'])) {
+          $query->fieldCondition('field_xml_data', 'value', '%' . $options['xml_field'] . '%', 'LIKE');
+        }
+
+        $context['sandbox']['max'] = $query->execute();
+      }
+
+      $query = new EntityFieldQuery();
+      $query->entityCondition('entity_type', $options['entity_type'])
+        ->range(0, $options['limit']);
+
+      // Attach the content types (for nodes).
+      $exclude_types = array('comment', 'taxonomy_term');
+      if (!in_array($options['entity_type'], $exclude_types)) {
+        $query->entityCondition('bundle', $options['bundles'], 'IN');
+      }
+      elseif ($options['entity_type'] == 'taxonomy_term') {
+        $query->propertyCondition('vid', $options['bundles'], 'IN');
+      }
+
+      // Add the option for regex.
+      if (!empty($options['regex'])) {
+        $query->propertyCondition('title', $options['regex'], 'REGEXP');
+      }
+
+      // Process the XML field
+      if (!empty($options['xml_field'])) {
+        $query->fieldCondition('field_xml_data', 'value', '%' . $options['xml_field'] . '%', 'LIKE');
+      }
+
+      $results = $query->execute();
+
+      $ids = array();
+      if (!empty($results[$options['entity_type']])) {
+        $ids = array_keys($results[$options['entity_type']]);
+      }
+
+      $entity_delete = $options['entity_type'];
+  }
+
+  // If query returns empty kill the batch.
+  if (empty($ids)) {
+    $context['finished'] = 1;
+    // Kill the function
+    return;
+  }
+
+  foreach($ids as $id) {
+    // Delete the entity.
+    entity_delete($entity_delete, $id);
+
+    // $context['results'][] = $nid;
+    $context['sandbox']['progress']++;
+    $context['sandbox']['current_node'] = $id;
+  }
+
+  $context['message'] = t('Deleted %current from the %total', array('%current' => $context['sandbox']['progress'], '%total' => $context['sandbox']['max']));
+
+  if ($context['sandbox']['progress'] != $context['sandbox']['max']) {
+    $context['finished'] = $context['sandbox']['progress'] / $context['sandbox']['max'];
+  }
 }
 
 /**
 * batch callback
 */
 function batch_content_update_content_types($types, &$context) {
-  
+
   if (empty($context['sandbox'])) {
     $context['sandbox']['progress'] = 0;
     $context['sandbox']['current_node'] = 0;
@@ -113,7 +631,7 @@ function batch_content_update_content_types($types, &$context) {
         ->countQuery()->execute()->fetchField();
     $context['sandbox']['max'] = $count;
   }
-  
+
   $limit = 5;
   $result = db_select('{node}', 'n')
     ->fields('n', array('nid'))
@@ -122,13 +640,13 @@ function batch_content_update_content_types($types, &$context) {
     ->orderBy('n.nid')
     ->range(0, $limit)
     ->execute();
-      
-      
+
+
   foreach($result as $row) {
     $node = node_load($row->nid);
     $node->published = TRUE;
     node_save($node);
-    
+
     $context['results'][] = $node->nid . ' : ' . check_plain($node->title);
     $context['sandbox']['progress']++;
     $context['sandbox']['current_node'] = $node->nid;
@@ -150,4 +668,250 @@ function batch_content_batch_finished($success, $results, $operations) {
   }
   drupal_set_message($message);
 }
-?>
+
+/**
+ * Change the values of the radioactivity fields of products.
+ *
+ * @see https://redmine.exed.nl/issues/14888
+ *
+ * @param array $form
+ * @param array $form_state
+ *
+ * @return array $form
+ */
+function batch_content_change_ra($form, &$form_state) {
+  // Only published suppliers are selected.
+  $form['leverancier'] = array(
+    '#type' => 'select',
+    '#options' => getSuppliers(1),
+    '#title' => t('Selecteer een leverancier:'),
+    '#description' => t('Selecteer een leverancier waarvan de producten een hogere radioactivity moeten hebben. Alleen gepubliceerde leveranciers worden getoond.'),
+    '#required' => TRUE,
+  );
+
+  $form['caltype'] = array(
+    '#type' => 'hidden',
+    #type' => 'radios',
+    '#options' => array(
+      0 => 'Plus / min',
+      1 => 'Vermenigvuldig',
+    ),
+    '#default_value' => 0,
+    '#required' => TRUE,
+    '#title' => t('Type van berekening'),
+    '#description' => t('Selecteer het type van berekening.'),
+  );
+
+  $form['calvalue'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Waarde'),
+    '#description' => t('De waarde die gebruikt moet worden voor het rekenen.'),
+    '#required' => TRUE,
+  );
+
+  $form['status'] = array(
+    '#type' => 'radios',
+    '#options' => array(
+      0 => t('Not published'),
+      1 => t('Published'),
+      2 => t('Both'),
+    ),
+    '#title' => t('Selecteer producten die:'),
+    '#description' => t('Hier kan geselecteerd worden of alleen gepubliceerde producten aangepast moeten worden of dat alles moet worden aangepast.'),
+    '#required' => TRUE,
+    '#default_value' => 1,
+  );
+
+  $form['action'] = array(
+    '#type' => 'action',
+  );
+  $form['action']['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Start'),
+  );
+  $form['action']['cancel'] = array(
+    '#type' => 'hidden',
+    '#value' => t('Cancel'),
+  );
+
+  return $form;
+}
+
+/**
+ * Validate the batch_content_change_ra form.
+ *
+ * @param array $form
+ * @param array $form_state
+ */
+function batch_content_change_ra_validate(&$form, &$form_state) {
+  // We should validate the 'calvalue' so that we can be certain it's a numeric
+  // field.
+  if (!is_numeric($form_state['values']['calvalue'])) {
+    form_set_error('calvalue', t('De waarde moet een getal zijn.'));
+  }
+
+  // Validate the leverancier because we're going to use it straight in
+  // the batch.
+  if (!is_numeric($form_state['values']['leverancier']) || $form_state['values']['leverancier'] < 1) {
+    form_set_error('leverancier', t('De ingevulde waarde klopt niet.'));
+  }
+
+  // Validate the status value.
+  if (!is_numeric($form_state['values']['status'])) {
+    form_set_error('status', t('De ingevulde waarde klopt niet.'));
+  }
+}
+
+/**
+ * The submit handler for batch_content_change_ra.
+ *
+ * @param array $form
+ * @param array $form_state
+ *
+ * @return array $form
+ */
+function batch_content_change_ra_submit($form, &$form_state) {
+  // See if cancel is pressed.
+  if ($form_state['values']['op'] == t('Cancel')) {
+    // Let's redirect
+    $form_state['redirect'] = 'admin/config/content/batch-content/change-ra';
+    drupal_set_message(t('De actie is geannuleerd.'));
+    // Return the form so that the submit isn't called.
+    return $form;
+  }
+
+  // Now, let's create a batch.
+  $leverancier_id = (int) $form_state['values']['leverancier'];
+  $status = (int) $form_state['values']['status'];
+
+  // Create a query to search for all the products.
+  $query = new EntityFieldQuery();
+  $query->entityCondition('entity_type', 'node')
+    ->entityCondition('bundle', 'product')
+    ->fieldCondition('field_leverancier', 'target_id', $leverancier_id);
+
+  // Add the status to the query.
+  if ($status != 2) {
+    $query->propertyCondition('status', $status);
+  }
+  // Get the results.
+  $results = $query->execute();
+  
+  if (isset($results['node'])) {
+    // Get an array of nids.
+    $nids = array_keys($results['node']);
+    // Create an array we send to the batch function.
+    $options = array(
+      'lid' => $leverancier_id,
+      'nids' => $nids,
+      'max' => count($nids),
+      'caltype' => $form_state['values']['caltype'],
+      'calvalue' => $form_state['values']['calvalue'],
+    );
+
+    $batch = array(
+      'title' => t('Update products.'),
+      'operations' => array(
+        array('batch_content_change_ra_batch', array($options)),
+      ),
+      'finished' => 'batch_content_batch_finished',
+    );
+
+    batch_set($batch);
+  } else {
+    drupal_set_message('Er zijn geen producten gevonden die aangepast moeten worden.');
+  }
+}
+
+/**
+ * Handles the batch calls that should update the nodes to increase the
+ * RA value.
+ *
+ * @param array $options
+ * @param array $context
+ */
+function batch_content_change_ra_batch($options, &$context) {
+  if (empty($context['sandbox'])) {
+    $context['sandbox']['progress'] = 0;
+    $context['sandbox']['max'] = $options['max'];
+    $context['sandbox']['nids'] = $options['nids'];
+  }
+
+  // Let's process 20 nodes at the time.
+  for ($i = 0; $i < 20 && $options['max'] >= $context['sandbox']['progress']; $i++) {
+    $nid = array_shift($context['sandbox']['nids']);
+    // Do not continue if empty!
+    if (empty($nid)) {
+      $context['finished'] = 1;
+      return;
+    }
+    // Load the nid.
+    $node = new EntityDrupalWrapper('node', $nid);
+
+    $context['results'][] = $node->title->value();
+
+    if ($value = $node->field_radioactivity->value()) {
+      // Handle as plus / minus.
+      if ($options['caltype'] == 0) {
+        $value += $options['calvalue'];
+      }
+      // Handle as multiplier.
+      if ($options['caltype'] == 1) {
+        $value = $value * $options['calvalue'];
+      }
+    } else {
+      // @todo Change this to work with the multiplier.
+      $value = $options['calvalue'];
+    }
+
+    // Make sure that we cant get below 0.
+    $value = $value < 0 ? 0 : $value;
+
+    // Set the new value.
+    $node->field_radioactivity->set($value);
+    // And save the node.
+    $node->save();
+
+    // Increase the progress.
+    $context['sandbox']['progress']++;
+
+    // What are we working on:
+    $context['message'] = t('Processed %number of total %total.', array('%number' => $context['sandbox']['progress'], '%total' => $options['max']));
+  }
+
+  // See if we're finished.
+  $context['finished'] = $context['sandbox']['progress'] / $context['sandbox']['max'];
+}
+
+/**
+ * Get an array containing the suppliers (leveranciers).
+ *
+ * The return array is stuctured like:
+ *   array(
+ *     23450 => 'Hema,
+ *     23451 => 'V&D',
+ *   );
+ * The primary key is the node ID of the node. The value is set to the title of
+ * the node.
+ *
+ * @param int status
+ *   The value of the status of the node. 0 is not published, 1 is published, 2
+ *   is both.
+ *
+ * @return array
+ */
+function getSuppliers($status = 2) {
+  $options = array();
+
+  // See if we got suppliers.
+  if ($nodes = node_load_multiple(array(), array('type' => 'leverancier'))) {
+    foreach ($nodes as $node) {
+      // Only add the node if the status is equal or set to 2.
+      if ($status == 2 || $node->status == $status) {
+        $options[$node->nid] = $node->title;
+      }
+    }
+  }
+  // Return the filled options list.
+  return $options;
+}
