@@ -73,6 +73,17 @@ function batch_content_menu() {
     'access arguments' => array('administer site configuration'),
     'type' => MENU_LOCAL_TASK,
   );
+
+  $items['admin/config/content/batch-content/path-update'] = array(
+    'title' => 'Update all path',
+    'description' => 'Update all the path aliases.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('batch_content_update_path'),
+    'access arguments' => array('administer site configuration'),
+    'type' => MENU_LOCAL_TASK,
+    'file' => 'batch_content.admin.inc',
+  );
+
   return $items;
 }
 
@@ -424,12 +435,7 @@ function batch_content_get_settings_form_validate($form, &$form_state) {
 function batch_content_get_settings_form_submit($form, &$form_state) {
   $values = $form_state['values'];
 
-  $types = array();
-  foreach($values['content_type'] as $type) {
-    if ($type != '0') {
-      $types[] = $type;
-    }
-  }
+  $types = _batch_content_form_content_types($form_state);
 
   $batch = array(
     'title' => t('Updating content type(s)'),
@@ -440,6 +446,26 @@ function batch_content_get_settings_form_submit($form, &$form_state) {
   );
 
   batch_set($batch);
+}
+
+/**
+ * Extract the content types from the form_state array.
+ *
+ * @param array $form_state
+ *
+ * @return array
+ */
+function _batch_content_form_content_types(array $form_state) {
+  $values = $form_state['values'];
+
+  $types = array();
+  foreach($values['content_type'] as $type) {
+    if ($type != '0') {
+      $types[] = $type;
+    }
+  }
+
+  return $types;
 }
 
 /**
